@@ -1,0 +1,368 @@
+---
+title: "Tidy Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = TRUE
+)
+library(tidyverse)
+```
+
+## 3. Pivoting
+
+1. Why are pivot_longer() and pivot_wider() not perfectly symmetrical?
+
+Carefully consider the following example:
+
+
+```{r 3_1_1}
+stocks <- tibble(
+    year   = c(2015, 2015, 2016, 2016),
+    half  = c(   1,    2,     1,    2),
+    return = c(1.88, 0.59, 0.92, 0.17)
+)
+stocks
+```
+
+```{r 3_1_2}
+stocks %>% 
+    pivot_wider(names_from = year, values_from = return) %>% 
+    pivot_longer(`2015`:`2016`, names_to = "year", values_to = "return")
+```
+
+```{r 3_1_2}
+stocks %>% 
+    pivot_wider(half, names_from = year, values_from = return) %>% 
+    pivot_longer(
+        # column names do not start with a letter
+        `2015`:`2016`,
+        names_to = "year",
+        values_to = "return",
+        # names_ptypes doesn't work for me
+        names_transform=list(year = as.integer)
+    )
+```
+
+```{r 3_1_3}
+stocks %>% 
+    pivot_wider(half, names_from=year, values_from=return)
+```
+
+
+2. Why does this code fail?
+
+```{r 3_2_1}
+table4a
+```
+
+
+```{r 3_2_2}
+table4a %>% 
+    pivot_longer(c(1999, 2000), names_to = "year", values_to = "cases")
+
+```
+
+The year columns names do not start with a letter:
+
+```{r 3_2_3}
+table4a %>% 
+    pivot_longer(
+        c(`1999`, `2000`),
+        names_to = "year",
+        values_to = "cases"
+    )
+```
+
+3. What would happen if you widen this table? Why? How could you add a new column to uniquely identify each value?
+
+```{r 3_3_1}
+people <- tribble(
+    ~name,             ~names,  ~values,
+    #-----------------|--------|------
+    "Phillip Woods",   "age",       45,
+    "Phillip Woods",   "height",   186,
+    "Phillip Woods",   "age",       50,
+    "Jessica Cordero", "age",       37,
+    "Jessica Cordero", "height",   156
+)
+people
+```
+
+`name` and `names` are not unique, so aggregate first
+
+```{r 3_3_2}
+people %>% 
+    group_by(name, names) %>% 
+    summarise(value=sum(values), .groups='drop') %>% 
+    pivot_wider(
+        name,
+        names_from=names,
+        values_from=value
+    )
+```
+
+
+4. Tidy the simple tibble below. Do you need to make it wider or longer? What are the variables?
+
+```{r 3_4_1}
+preg <- tribble(
+    ~pregnant, ~male, ~female,
+    "yes",     NA,    10,
+    "no",      20,    12
+)
+preg
+```
+
+
+```{r 3_4_2}
+preg %>% 
+    pivot_longer(
+        c(male, female),
+        names_to = 'sex',
+        values_to = 'count'
+    )
+```
+
+## 4. Separating and Uniting
+
+### Separate
+
+
+```{r table3}
+table3
+```
+
+
+```{r table3_separate}
+table3 %>% 
+    separate(
+        rate,
+        into=c('cases', 'population'),
+        # split on non-alphanumeric characters, but we can be explicit
+        sep='/',
+        convert=TRUE
+    )
+```
+
+### Unite
+
+
+```{r table5}
+table5
+```
+
+
+```{r table5_unite}
+table5 %>% 
+    unite(new, century, year, sep="") %>% 
+    mutate(new=as.integer(new))
+```
+
+
+
+## 5. Missing Values
+
+
+```{r stocks_missing}
+stocks <- tibble(
+    year   = c(2015, 2015, 2015, 2015, 2016, 2016, 2016),
+    qtr    = c(   1,    2,    3,    4,    2,    3,    4),
+    return = c(1.88, 0.59, 0.35,   NA, 0.92, 0.17, 2.66)
+)
+stocks
+```
+
+There are two missing values in this dataset:
+
+- The return for the fourth quarter of 2015 is explicitly missing, because the cell where its value should be instead contains NA.
+- The return for the first quarter of 2016 is implicitly missing, because it simply does not appear in the dataset.
+
+One way to think about the difference is with this Zen-like koan: An explicit missing value is the presence of an absence; an implicit missing value is the absence of a presence.
+
+
+An important tool for making missing values explicit in tidy data is `complete()`
+
+```{r stocks_complete}
+stocks %>% 
+    # find all the unique combinations of year and quarter
+    complete(year, qtr)
+```
+
+## 6. Case Study
+
+```{r cs_1}
+who
+```
+
+Convert columns that are not variables to rows. Do not make rows for NA values at this stage
+
+```{r cs_2}
+who1 <- who %>% 
+    pivot_longer(
+        cols = new_sp_m014:newrel_f65,
+        names_to = 'key',
+        values_to = 'cases',
+        values_drop_na = TRUE
+    )
+who1 
+```
+
+count is a good place to start when determining the structure of a new column
+
+```{r cs_3}
+who1 %>% 
+    count(key)
+```
+
+The key contains multiple pieces of information. new or old, the type, the gender and the age group
+
+```{r cs_4}
+who2 <- who1 %>% 
+    mutate(key = str_replace(key, 'newrel', 'new_rel'))
+```
+
+
+
+```{r cs_5}
+who3 <- who2 %>% 
+    separate(key, c('new', 'type', 'sexage'), sep = '_')
+who3 %>% 
+    count(type)
+```
+
+- rel stands for cases of relapse
+- ep stands for cases of extrapulmonary TB
+- sn stands for cases of pulmonary TB that could not be diagnosed by a pulmonary smear (smear negative)
+- sp stands for cases of pulmonary TB that could be diagnosed by a pulmonary smear (smear positive)
+
+
+remove constant or redundant columns
+
+```{r cs_6}
+who3 %>% 
+    count(new)
+
+who4 <- who3 %>% 
+    select(-new, -iso2, -iso3)
+```
+
+convert sexage to sex and age
+
+
+```{r cs_7}
+who5 <- who4 %>% 
+    separate(sexage, c('sex', 'age'), sep=1)
+```
+
+These steps can be combined like this:
+
+
+```{r cs_8}
+who_tidy <- who %>%
+    pivot_longer(
+        cols = new_sp_m014:newrel_f65, 
+        names_to = "key", 
+        values_to = "cases", 
+        values_drop_na = TRUE
+    ) %>% 
+    mutate(
+        key = stringr::str_replace(key, "newrel", "new_rel")
+    ) %>%
+    separate(key, c("new", "var", "sexage")) %>% 
+    select(-new, -iso2, -iso3) %>% 
+    separate(sexage, c("sex", "age"), sep = 1)
+```
+
+```{r cs_9}
+rm(who1, who2, who3, who4, who5)
+```
+
+### Exercises
+
+1. In this case study I set `values_drop_na.rm = TRUE` just to make it easier to check that we had the correct values. Is this reasonable? Think about how missing values are represented in this dataset. Are there implicit missing values? What’s the difference between an `NA` and zero?
+
+First we can check if there are any implicit missing values by looking at the first and the last year of recorded data for each country:
+
+
+```{r 6_1_1, fig.width=12, fig.height=30}
+who_tidy %>%
+    group_by(country) %>%
+    summarize(year_min = min(year), year_max = max(year)) %>%
+    filter(year_min > 1980) %>% 
+    ggplot() +
+    geom_point(mapping = aes(x = country, y = factor(year_min)), color = 'red') +
+    geom_point(mapping = aes(x = country, y = factor(year_max)), color = 'blue') +
+    labs(x = NULL, y = NULL) +
+    coord_flip()
+```
+
+
+We can see that most countries have their first recorded data in 1980/1995, and last recorded data in 2013, with the exception for a few countries. That means that there are implicit missing values – the values in some years for a certain few countries simply do not appear in the data set.
+
+
+Another way to investigate this and to confirm our finding is to look at the number of years of recorded data for each country:
+
+```{r 6_1_2, fig.width=8, fig.height=28}
+who %>%
+    group_by(country) %>%
+    summarize(count = n()) %>%
+    ggplot() +
+    geom_point(mapping = aes(x = country, y = count), color = 'green') +
+    coord_flip() +
+    labs(y='Number of recorded years', x=NULL)
+```
+
+
+```{r 6_1_3}
+# select all value columns. how many columns add to 0
+sum(who %>% select(-c(1:4)) == 0, na.rm=T)
+```
+
+There are cases that have a recorded value of 0, which mean they are explicitly stated as no-case
+
+
+check number of NAs
+
+```{r 6_1_4}
+who %>% 
+    select(-c(1:4)) %>% 
+    map_int(~sum(is.na(.x)))
+```
+
+
+2. iso2 and iso3 were redundant with country. Confirm this claim.
+
+
+```{r 6_2_1}
+who %>% 
+    select(country, iso2, iso3) %>% 
+    map_int(~length(unique(.x)))
+```
+
+```{r 6_2_2}
+who %>% 
+    select(country, iso2, iso3) %>% 
+    unite(combined) %>% 
+    distinct()
+```
+
+
+
+3. For each country, year, and sex compute the total number of cases of TB. Make an informative visualisation of the data.
+
+
+```{r 6_3, fig.width=10, fig.height=10}
+who_tidy %>% 
+    group_by(country, year, sex) %>% 
+    summarise(total_cases = sum(cases), .groups='drop') %>% 
+    filter(year > 1994) %>% 
+    # group lines by country_gender
+    unite(country_sex, country, sex, remove = FALSE) %>% 
+    ggplot() +
+    geom_line(aes(x = factor(year), y = total_cases, color = sex, group = country_sex)) +
+    labs(x = NULL, y = NULL) +
+    ggtitle('Total number of TB Cases by Country and Sex')
+```
+

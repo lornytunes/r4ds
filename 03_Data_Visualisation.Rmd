@@ -1,0 +1,194 @@
+---
+title: "Data Visualisation"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = TRUE,
+    warning = FALSE,
+    fig.width=6,
+    fig.height=4
+)
+```
+
+## First Steps
+
+```{r mpg_1}
+ggplot(data = mpg) + 
+    geom_point(mapping = aes(x = displ, y = hwy))
+```
+
+### Exercises
+
+1. Run `ggplot(data = mpg)`. What do you see?
+
+```{r 2_1}
+ggplot(data=mpg)
+```
+2. How many rows are in mpg? How many columns?
+
+```{r 2_2}
+dim(mpg)
+```
+3. What does the `drv` variable describe? Read the help for `?mpg` to find out.
+
+the type of drive train, where f = front-wheel drive, r = rear wheel drive, 4 = 4wd
+
+4. Make a scatterplot of hwy vs cyl.
+
+```{r 2_4}
+mpg %>% 
+    ggplot(aes(x = cyl, y = hwy)) +
+    geom_point()
+```
+
+5. What happens if you make a scatterplot of `class` vs `drv`? Why is the plot not useful?
+
+```{r 2_5}
+mpg %>% 
+    ggplot(aes(x = class, y = drv)) +
+    geom_point()
+```
+
+
+Intersection of two factors. Contains no quantitive data.
+
+
+## Aesthetic Mappings
+
+1. What’s gone wrong with this code? Why are the points not blue?
+
+```{r 3_1_1}
+ggplot(data = mpg) + 
+    geom_point(mapping = aes(x = displ, y = hwy, color = "blue"))
+```
+
+```{r 3_1_2}
+ggplot(data = mpg) + 
+    geom_point(mapping = aes(x = displ, y = hwy), colour = 'blue')
+```
+2. Which variables in mpg are categorical? Which variables are continuous? (Hint: type ?mpg to read the documentation for the dataset). How can you see this information when you run mpg?
+
+```{r 3_2_1}
+mpg %>% 
+    map_lgl(is.factor)
+```
+
+
+```{r 3_2_2}
+mpg
+```
+3. Map a continuous variable to color, size, and shape. How do these aesthetics behave differently for categorical vs. continuous variables?
+
+```{r 3_3}
+
+```
+
+
+4. What happens if you map the same variable to multiple aesthetics?
+
+```{r 3_4}
+mpg %>% 
+    ggplot(aes(x = cyl, y = hwy, size = hwy, color = hwy)) +
+    geom_point()
+```
+
+5. What does the stroke aesthetic do? What shapes does it work with? (Hint: use `?geom_point`)
+
+```{r 3_5}
+# stroke modifies the width of the border
+mpg %>% 
+    ggplot(aes(x = cyl, y = hwy)) +
+    geom_point(shape = 21, color = 'black', fill = 'white', stroke = 1)
+```
+
+6. What happens if you map an aesthetic to something other than a variable name, like `aes(colour = displ < 5)`? Note, you’ll also need to specify x and y.
+
+```{r 3_6}
+mpg %>% 
+    ggplot(aes(x = cyl, y = hwy, colour = displ < 5)) +
+    geom_point()
+```
+
+## Facets
+
+Wrap
+
+```{r facet_wrap, fig.width=8, fig.height=5}
+ggplot(data = mpg) + 
+    geom_point(mapping = aes(x = displ, y = hwy)) + 
+    facet_wrap(~ class, nrow = 2)
+```
+
+Grid
+
+```{r facet_grid, fig.width=8, fig.height=6}
+ggplot(data = mpg) + 
+    geom_point(mapping = aes(x = displ, y = hwy)) + 
+    # rows ~ columns
+    facet_grid(drv ~ cyl)
+```
+
+### Exercises
+
+1. What happens if you facet on a continuous variable?
+
+```{r 4_1, fig.width=8, fig.height=8}
+mpg %>% 
+    ggplot(aes(x = displ, y = hwy)) +
+    geom_point() +
+    facet_wrap(~cty)
+```
+
+2. What do the empty cells in plot with facet_grid(drv ~ cyl) mean? How do they relate to this plot?
+
+```{r 4_2_1}
+ggplot(data = mpg) + 
+    geom_point(mapping = aes(x = drv, y = cyl))
+```
+The empty cells correspond the combinations of drv and cyl that have no records in common.
+
+3. What plots does the following code make? What does `.` do?
+
+```{r 4_3, fig.width=7, fig.height=5}
+# rows
+ggplot(data = mpg) + 
+    geom_point(mapping = aes(x = displ, y = hwy)) +
+    facet_grid(drv ~ .)
+
+# columns
+ggplot(data = mpg) + 
+    geom_point(mapping = aes(x = displ, y = hwy)) +
+    facet_grid(. ~ cyl)
+```
+
+4. Take the first faceted plot in this section:
+
+```{r 4_4, fig.width=7, fig.height=5}
+ggplot(data = mpg) + 
+    geom_point(mapping = aes(x = displ, y = hwy)) +
+    facet_wrap(~ class, nrow = 2)
+```
+
+What are the advantages to using faceting instead of the colour aesthetic? What are the disadvantages? How might the balance change if you had a larger dataset?
+
+5. Read `?facet_wrap`. What does `nrow` do? What does `ncol` do? What other options control the layout of the individual panels? Why doesn’t `facet_grid()` have nrow and ncol arguments?
+
+6. When using `facet_grid()` you should usually put the variable with more unique levels in the columns. Why?
+
+## Geometric Objects
+
+### Exercises
+
+1. What geom would you use to draw a line chart? A boxplot? A histogram? An area chart?
+
+2. Run this code in your head and predict what the output will look like. Then, run the code in R and check your predictions.
+
+```{r 5_1}
+ggplot(data = mpg, mapping = aes(x = displ, y = hwy, color = drv)) + 
+    geom_point() + 
+    geom_smooth(se = FALSE)
+```
+
+

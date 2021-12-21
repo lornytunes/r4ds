@@ -1,0 +1,209 @@
+---
+title: "Relational Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = TRUE,
+    cache = FALSE
+)
+
+library(tidyverse)
+library(nycflights13)
+library(Lahman)
+```
+
+## nycflights13
+
+- airlines lets you look up the full carrier name from its abbreviated code
+- airports gives information about each airport, identified by the faa airport code
+- planes gives information about each plane, identified by its tailnum
+- weather gives the weather at each NYC airport for each hour
+
+1. Imagine you wanted to draw (approximately) the route each plane flies from its origin to its destination. What variables would you need? What tables would you need to combine?
+
+
+```{r ex_2_1_1}
+flights %>% 
+    # join origin to airports
+    inner_join(airports, by=c('origin'='faa')) %>% 
+    select(origin, name, lat, lon, dest) %>% 
+    # join dest to airports
+    inner_join(airports, by=c('dest'='faa'), suffix=c('_origin', '_dest')) %>% 
+    select(matches('origin|dest'))
+```
+
+
+
+2. I forgot to draw the relationship between weather and airports. What is the relationship and how should it appear in the diagram?
+
+```{r ex_2_1_2}
+# airports with weather
+airports %>% 
+    semi_join(weather, by=c('faa'='origin'))
+```
+
+## Keys
+
+1. Add a surrogate key to flights
+
+```{r ex_3_1_1}
+flights %>% 
+    mutate(index=row_number()) %>% 
+    select(index, everything())
+```
+
+2. Identify the keys in the following datasets
+
+    1. `Lahman::Batting`
+    1. `ggplot2::diamonds`
+
+
+Use count aggregation:
+
+    
+```{r 3_1_2_1}
+
+Batting %>% 
+    count(playerID, yearID, stint, teamID) %>% 
+    filter(n > 1)
+```
+
+```{r}
+diamonds %>% 
+    count(carat, cut, color, clarity, depth, table, price, x, y, z) %>% 
+    filter(n > 1)
+```
+
+
+## Mutating Joins
+
+1. Compute the average delay by destination, then join on the airports data frame so you can show the spatial distribution of delays. Here’s an easy way to draw a map of the United States:
+
+```{r airports_quickmap}
+
+airports %>%
+    filter(lon > -140) %>% 
+    # remove airports not in flights
+    semi_join(flights, c("faa" = "dest")) %>%
+    ggplot(aes(lon, lat)) +
+    borders("state") +
+    geom_point() +
+    coord_quickmap()
+```
+
+```{r 4_1}
+flights %>% 
+    group_by(dest) %>% 
+    summarise(avg_dep_time = mean(dep_time, na.rm = TRUE)) %>% 
+    inner_join(airports, c('dest' = 'faa')) %>% 
+    filter(lon > -140, !is.na(avg_dep_time)) %>% 
+    select(lon, lat, avg_dep_time) %>% 
+    ggplot(aes(x = lon, y = lat, size = avg_dep_time, color = avg_dep_time)) +
+    borders('state') +
+    guides(size = guide_none()) +
+    labs(color='Average\ndeparture time') +
+    geom_point() +
+    coord_quickmap()
+```
+
+2. Add the location of the origin and destination (i.e. the lat and lon) to flights.
+
+```{r 4_2}
+flights %>% 
+  left_join(airports, by = c('dest' = 'faa')) %>% 
+  left_join(airports, by = c('origin' = 'faa'), suffix = c('.dest', '.origin')) %>% 
+  select(dest, origin, contains('lat'), contains('lon')) 
+
+```
+
+
+
+3. Is there a relationship between the age of a plane and its delays?
+
+Information about delays is in flights and the age is in planes
+
+```{r 4_3}
+
+flights %>% 
+    # make tailnum the primary key
+    group_by(tailnum) %>% 
+    # get info about the average delays
+    summarise(
+        arrivals = mean(arr_delay, na.rm=T),
+        departures = mean(dep_delay, na.rm=T)
+    ) %>% 
+    # long form
+    pivot_longer(
+        c(arrivals, departures),
+        names_to='mode',
+        values_to='delay',
+        names_transform = list(mode=as.factor)
+    ) %>% 
+    # get info about the age
+    left_join(planes, by='tailnum') %>% 
+    select(tailnum, mode, delay, year) %>% 
+    ggplot(aes(x = year, y = delay)) +
+    geom_point(alpha=0.4) +
+    geom_smooth(se = FALSE) +
+    facet_wrap(~mode) +
+    labs(x = 'Year of manufacture')
+```
+
+
+
+4. What weather conditions make it more likely to see a delay?
+
+
+Join on year, month, day, hour, origin. Note that weather columns are observations, not variables and we want to map depature delay to weather conditions
+
+```{r 4_4_1}
+flights_weather <- flights %>% 
+    left_join(weather, by = c('year', 'month', 'day', 'hour', 'origin')) %>% 
+    # create a factor column where the levels are the conditions
+    pivot_longer(temp:visib, names_to = 'condition', values_to = 'value') %>% 
+    # consider only flights with a delay
+    filter(!is.na(dep_delay)) %>% 
+    # select the conditions and delay
+    select(condition, value, dep_delay)
+```
+
+
+```{r 4_4_2, fig.width=12, fig.height=16}
+flights_weather %>%  
+    ggplot(aes(x = value, y = dep_delay)) +
+    geom_hex() +
+    labs(y = NULL) +
+    facet_wrap(~condition, ncol = 3, scale = 'free_x')
+```
+
+
+5. What happened on June 13 2013? Display the spatial pattern of delays and then use Google to cross-reference with the weather.
+
+```{r 4_5_1}
+flights_june_6_2013_delays <- flights %>% 
+    filter(year == 2013, month == 6, day == 13) %>% 
+    group_by(dest) %>% 
+    summarise(
+        avg_arr_delay = mean(arr_delay, na.rm = TRUE),
+        avg_dep_delay = mean(dep_delay, na.rm = TRUE)
+    )
+```
+
+
+
+```{r 4_5_2}
+flights_june_6_2013_delays %>% 
+    left_join(airports, by = c('dest' = 'faa')) %>% 
+    filter(lon > -140) %>% 
+    ggplot(aes(x = lon, y = lat, size = avg_arr_delay, color = avg_arr_delay)) +
+    borders('state') +
+    geom_point(alpha = .8) +
+    guides(size = guide_none()) +
+    scale_color_continuous(low = 'yellow', high = 'red') +
+    coord_quickmap()
+```
+
+
+## Filtering Joins
